@@ -17,9 +17,24 @@ from dnd.lsh import simhash
 
 class HashDND(object):
     """differentiable neural dictionary, using LSH for approximate
-    nearest neighbour lookup. Assumes keys are vectors."""
+    nearest neighbour lookup. Assumes keys are vectors. Also assumes we only
+    use float32, for now."""
 
-    sentinal_values = {tf.float32: np.inf}
+    sentinal_value = np.inf
+
+    @classmethod
+    def _setup_values(cls, hash_bits, max_neighbours, value_shapes):
+        """setup variables with appropriate initializers given the shapes"""
+        values = []
+        init = tf.constant_initializer(cls.sentinel_value)
+        for i, shape in enumerate(value_shapes):
+            var_shape = [2**hash_bits, max_neighbours] + shape
+            var = tf.get_variable(name='value_{}'.format(i),
+                                  shape=var_shape,
+                                  initializer=init)
+            values.append(var)
+        return values
+
 
     def __init__(self, hash_bits, max_neighbours, key_size, value_shapes):
         """Set up the dnd.
@@ -38,8 +53,21 @@ class HashDND(object):
         """
         self._hash_size = hash_bits
         self._keys = tf.zeros([2**hash_bits, max_neighbours, key_size])
+        self._values = HashDND._setup_values(hash_bits,
+                                             max_neighbours,
+                                             value_shapes)
+        self._hash_config = get_simhash_config(self.key_size,
+                                               self._hash_size)
 
-    def store(key, value):
+    def _get_bucket(self, key):
+        """look up the keys and values in a given bucket correspondng to the
+        hash of the given key"""
+        bucket_idx = simhash(key, self._hash_config)
+        keys = self._keys[bucket_idx, ...]
+        values = [val[bucket_idx, ...] for val in self._values]
+        return keys, values
+
+    def store(self, key, value):
         """Gets an op which will store the key-value pair. This involves the
         following process:
             - compute hash of `key`
@@ -59,9 +87,17 @@ class HashDND(object):
         Returns:
             op: an op which carries out the above steps.
         """
-        pass
+        with tf.name_scope('dnd/store'):
+            bucket_keys, bucket_values = self._get_bucket(key)
+            # is there space?
+            bucket_full = tf.reduce_all(
+                tf.stack(
+                    [tf.reduce_all(tf.not_equal(var, self.sentinel_value))
+                     for var in bucket_values]))
+            # if there is, find it and assign to it
+            # if there is not, do something else??
 
-    def _get_averaged_value(bucket, values, similarities):
+    def _get_averaged_value(self, bucket, values, similarities):
         """get the values from a specific bucket, weighted by similarities and
         summed.
 
@@ -78,7 +114,7 @@ class HashDND(object):
         weighted_values = similarities * bucket_values
         return tf.reduce_sum(weighted_values, axis=1)
 
-    def get(key):
+    def get(self, key):
         """Get the values in the dictionary corresponding to a particular key,
         or zeros if the key is not present.
 
@@ -96,11 +132,8 @@ class HashDND(object):
         Returns:
             value (list): list of associated values.
         """
-        bucket = simhash(key, self._hash_size)
-        # slice out the bucket
-        neighbour_keys = self._keys[bucket, ...]
-        # compute similarities
-        neighbour_sims = tf.matmul(tf.nn.l2_normalize(key, dim=1),
-                                   tf.nn.l2_normalize(neighbour_keys, dim=1),
-                                   transpose_b=True)
-        # pull out values for the bucket, weight by similarities and sum
+        with tf.name_scope('dnd/get'):
+            bucket_keys, bucket_values = self._get_bucket(key)
+            # compute similarities
+            # TODO: need to pass in a method for this?
+            # pull out values for the bucket, weight by similarities and sum

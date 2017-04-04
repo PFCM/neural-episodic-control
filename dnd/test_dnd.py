@@ -8,6 +8,8 @@ import dnd.hashdict
 
 class TestDND(test.TestCase):
 
+    simple_shapes = [[100]]
+
     def test_store(self):
         """make sure we can store values in the dictionary"""
         self.assertTrue(False)
