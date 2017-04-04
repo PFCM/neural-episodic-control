@@ -20,11 +20,25 @@ class TestSimHash(test.TestCase):
         """not an exhaustive test"""
         inputs = tf.random_normal([10, 100])
 
-        hashed = lsh.simhash(inputs, 16)
+        hashed = lsh.simhash(inputs, 4)
 
-        in_range = tf.reduce_all(tf.less(hashed, 2**16))
+        in_range = tf.reduce_all(tf.less(hashed, 2**4))
 
         with self.test_session() as sess:
             sess.run(tf.global_variables_initializer())
             for _ in range(100):
                 self.assertTrue(sess.run(in_range))
+
+    def test_deterministic(self):
+        """ensure it gives the same result twice"""
+        inputs = tf.get_variable(name='inputs',
+                                 shape=[1, 20])
+
+        hashed = lsh.simhash(inputs, 8)
+
+        with self.test_session() as sess:
+            sess.run(tf.global_variables_initializer())
+            a = sess.run(hashed)
+            b = sess.run(hashed)
+
+            self.assertEqual(a, b)
