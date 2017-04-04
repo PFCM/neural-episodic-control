@@ -10,9 +10,10 @@ class TestSimHash(test.TestCase):
 
     def test_shapes(self):
         """just ensure we get the correct shapes back"""
-        inputs = tf.random_normal([10, 15, 5])
+        inputs = tf.random_normal([10, 15])
 
-        hashed = lsh.simhash(inputs, 16)
+        conf = lsh.get_simhash_config(15, 16)
+        hashed = lsh.simhash(inputs, conf)
 
         self.assertEqual([10, 1], hashed.get_shape().as_list())
 
@@ -20,7 +21,8 @@ class TestSimHash(test.TestCase):
         """not an exhaustive test"""
         inputs = tf.random_normal([10, 100])
 
-        hashed = lsh.simhash(inputs, 4)
+        conf = lsh.get_simhash_config(100, 4)
+        hashed = lsh.simhash(inputs, conf)
 
         in_range = tf.reduce_all(tf.less(hashed, 2**4))
 
@@ -33,8 +35,8 @@ class TestSimHash(test.TestCase):
         """ensure it gives the same result twice"""
         inputs = tf.get_variable(name='inputs',
                                  shape=[1, 20])
-
-        hashed = lsh.simhash(inputs, 8)
+        conf = lsh.get_simhash_config(20, 8)
+        hashed = lsh.simhash(inputs, conf)
 
         with self.test_session() as sess:
             sess.run(tf.global_variables_initializer())
@@ -42,3 +44,28 @@ class TestSimHash(test.TestCase):
             b = sess.run(hashed)
 
             self.assertEqual(a, b)
+
+    def test_config_reuse(self):
+        """make sure it is trying to reuse variables"""
+        conf = lsh.get_simhash_config(10, 10)
+
+        with self.assertRaisesRegex(ValueError, '.* already exists'):
+            conf = lsh.get_simhash_config(10, 12)
+
+    def test_different_config_different_results(self):
+        inputs = tf.get_variable(name='inputs',
+                                 shape=[50, 100])
+
+        with tf.variable_scope('a'):
+            conf_a = lsh.get_simhash_config(100, 8)
+        with tf.variable_scope('b'):
+            conf_b = lsh.get_simhash_config(100, 8)
+
+        hash_a = lsh.simhash(inputs, conf_a)
+        hash_b = lsh.simhash(inputs, conf_b)
+
+        equal = tf.reduce_all(tf.equal(hash_a, hash_b))
+
+        with self.test_session() as sess:
+            sess.run(tf.global_variables_initializer())
+            self.assertFalse(sess.run(equal))

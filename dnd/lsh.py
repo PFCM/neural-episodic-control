@@ -4,7 +4,37 @@ import numpy as np
 import tensorflow as tf
 
 
-def simhash(inputs, num_bits):
+def get_simhash_config(input_size, hash_bits):
+    """Gets any necessary configuration and data structures necessary for
+    consistent hashing.
+
+    For simhash, this just corresponds to the random matrix used to project the
+    input down, but we also store some values used in the conversion from
+    binary to integers.
+
+    This function should be run once and the result stored and passed in to all
+    subsequent calls to `simhash`, so that we use the same matrix every time.
+
+    Args:
+        input_size (int): size of the inputs we are going to hash.
+        hash_bits (int): the number of bits we output.
+
+    Returns:
+        dict: dictionary with two keys: "matrix" corresponding to a variable
+            used for the random projection and "bases" used in the conversion
+            to integers.
+    """
+    with tf.variable_scope('simhash_config'):
+        mat = tf.get_variable(
+            'projection_matrix',
+            shape=[input_size, hash_bits],
+            initializer=tf.random_normal_initializer())
+        bases = tf.expand_dims(2 ** tf.range(hash_bits), 0)
+        return {'matrix': mat,
+                'bases': bases}
+
+
+def simhash(inputs, config):
     """SimHash the inputs into an integer with `num_bits` used bits.
     The process is:
         - flatten inputs into `[batch_size, ?]`
@@ -24,25 +54,17 @@ def simhash(inputs, num_bits):
     Args:
         inputs (tensor): tensor of whatever shape, with the batch on the first
             axis. Apart from the batch size, the shape does need to be defined.
-        num_bits (int): number of buckets we hash to.
+        config (dict): the result of `get_simhash_config`.
 
     Returns:
         tensor: `[batch_size, 1]` integer tensor.
     """
     with tf.variable_scope('simhash'):
-        original_shape = inputs.get_shape().as_list()
-        num_features = np.prod(original_shape[1:])
-        inputs = tf.reshape(inputs, [-1, num_features])
-        projection_matrix = tf.get_variable(
-            'projection', shape=[num_features, num_bits],
-            initializer=tf.random_normal_initializer())
-        projected = tf.matmul(inputs, projection_matrix)
+        projected = tf.matmul(inputs, config['matrix'])
         bits = tf.sign(projected) * 0.5 + 0.5
         # return bits
         bits = tf.cast(bits, tf.int32)
         # convert to single int
-        bases = 2 ** tf.range(num_bits)
-        # hope for broadcasting
-        index = tf.reduce_sum(bits * tf.expand_dims(bases, 0),
+        index = tf.reduce_sum(bits * config['bases'],
                               axis=1, keep_dims=True)
         return index
