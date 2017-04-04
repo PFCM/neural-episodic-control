@@ -38,9 +38,11 @@ def simhash(inputs, num_bits):
             initializer=tf.random_normal_initializer())
         projected = tf.matmul(inputs, projection_matrix)
         bits = tf.sign(projected) * 0.5 + 0.5
+        # return bits
         bits = tf.cast(bits, tf.int32)
         # convert to single int
-        bases = (tf.range(num_bits) + 1) ** 2
+        bases = 2 ** tf.range(num_bits)
         # hope for broadcasting
-        index = tf.reduce_sum(bits * bases, axis=1, keep_dims=True)
+        index = tf.reduce_sum(bits * tf.expand_dims(bases, 0),
+                              axis=1, keep_dims=True)
         return index
