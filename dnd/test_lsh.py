@@ -45,6 +45,14 @@ class TestSimHash(test.TestCase):
 
             self.assertEqual(a, b)
 
+    def test_one_at_a_time(self):
+        """make sure if gives a scalr back if given a vector"""
+        inputs = tf.random_normal([5])
+        conf = lsh.get_simhash_config(5, 2)
+        hashed = lsh.simhash(inputs, conf)
+
+        self.assertEqual(hashed.get_shape().as_list(), [])
+
     def test_config_reuse(self):
         """make sure it is trying to reuse variables"""
         conf = lsh.get_simhash_config(10, 10)

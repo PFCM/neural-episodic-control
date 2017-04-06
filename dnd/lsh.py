@@ -51,6 +51,9 @@ def simhash(inputs, config):
     some potentially unexpected hashes which _might_ break the locality
     sensitive property).
 
+    If inputs is a vector, then we will return a scalar, otherwise batches of
+    inputs will produce batches of outputs.
+
     Args:
         inputs (tensor): tensor of whatever shape, with the batch on the first
             axis. Apart from the batch size, the shape does need to be defined.
@@ -60,6 +63,11 @@ def simhash(inputs, config):
         tensor: `[batch_size, 1]` integer tensor.
     """
     with tf.variable_scope('simhash'):
+        if len(inputs.get_shape()) == 1:
+            inputs = tf.expand_dims(inputs, 0)
+            squeeze_output = True
+        else:
+            squeeze_output = False
         projected = tf.matmul(inputs, config['matrix'])
         bits = tf.sign(projected) * 0.5 + 0.5
         # return bits
@@ -67,4 +75,6 @@ def simhash(inputs, config):
         # convert to single int
         index = tf.reduce_sum(bits * config['bases'],
                               axis=1, keep_dims=True)
+        if squeeze_output:
+            index = tf.squeeze(index)
         return index
