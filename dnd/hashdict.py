@@ -13,6 +13,7 @@ import numpy as np
 import tensorflow as tf
 
 from dnd.lsh import simhash, get_simhash_config
+import dnd.similarities
 
 
 class HashDND(object):
@@ -41,7 +42,8 @@ class HashDND(object):
             values.append(var)
         return keys, values
 
-    def __init__(self, hash_bits, max_neighbours, key_size, value_shapes):
+    def __init__(self, hash_bits, max_neighbours, key_size, value_shapes,
+                 similarity_measure=None):
         """Set up the dnd.
 
         Args:
@@ -54,7 +56,16 @@ class HashDND(object):
             key_size (int): size of the key vectors. We use the unhashed key
                 vectors to compute similarities between keys we find from the
                 nearest neighbour lookup.
-            value_shapes ()
+            value_shapes (list): list of shapes for the values stored in the
+                dictionary.
+            similarity_measure (Optional[callable]): function which adds ops
+                to compare a query key with all of the other keys in the
+                bucket. If unspecified, the cosine similarity is used. Should
+                be a callable which takes two input tensors: the query key
+                (shaped `[key_size]`) and a  `[max_neighbours, key_size]`
+                tensor  of keys to compare against. Should return a
+                `[max_neighbours]` tensor of similarities, between 0 and 1
+                where 1 means the two keys were identical.
         """
         self._hash_size = hash_bits
         self._key_size = key_size
@@ -66,6 +77,9 @@ class HashDND(object):
         self._hash_config = get_simhash_config(self._key_size,
                                                self._hash_size)
 
+        if not similarity_measure:
+            similarity_measure = dnd.similarities.cosine_similarity
+        self._similarity_measure = similarity_measure
         self._summarise_pressure()
 
     def _summarise_pressure(self):
@@ -78,7 +92,7 @@ class HashDND(object):
 
     def _get_bucket(self, key):
         """look up the contents of a bucket by hash. Also return the bucket
-        index so we can create updates to the sotrage variables."""
+        index so we can create updates to the storage variables."""
         idx = simhash(key, self._hash_config)
         bucket_start = idx * self._bucket_size
         bucket_end = (idx + 1) * self._bucket_size
@@ -111,7 +125,6 @@ class HashDND(object):
             # is there space?
             can_store = tf.reduce_any(tf.equal(bucket_keys[:, 0],
                                                self.sentinel_value))
-            can_store = tf.Print(can_store, [can_store])
 
             def _empty_store():
                 return self._get_store_op_empty(key, value, idx, bucket_keys)
@@ -173,22 +186,11 @@ class HashDND(object):
             store_idx = self._flatten_index(idx, bucket_index)
             return self._update_at_index(store_idx, store_key, store_vals)
 
-    def _get_averaged_value(self, bucket, values, similarities):
-        """get the values from a specific bucket, weighted by similarities and
-        summed.
-
-        Steps:
-            - pull out the values corresponding to the (integer) bucket.
-            - weight by the similarities
-                - we assume these are already zeros for empty slots in the
-                  bucket
-            - sum
-        """
-        # values are [buckets, max_values, ...]
-        bucket_values = tf.expand_dims(values[bucket, ...], 0)
-        # similarities are [batch, max_values]
-        weighted_values = similarities * bucket_values
-        return tf.reduce_sum(weighted_values, axis=1)
+    def _get_averaged_value(self, values, similarities):
+        """get a weighted sum of values."""
+        weighted_values = tf.expand_dims(similarities, 1) * values
+        all_values = tf.reduce_sum(weighted_values, axis=0)
+        return all_values
 
     def get(self, key):
         """Get the values in the dictionary corresponding to a particular key,
@@ -203,13 +205,21 @@ class HashDND(object):
         The default similarity is the cosine distance.
 
         Args:
-            key (tensor): `[batch_size, key_size]` batch of keys to look up.
+            key (tensor): `[key_size]` batch of keys to look up.
 
         Returns:
-            value (list): list of associated values.
+            value (tuple): associated values.
         """
         with tf.name_scope('dnd/get'):
-            bucket_keys, bucket_values = self._get_bucket(key)
+            bucket_keys, bucket_values, _ = self._get_bucket(key)
             # compute similarities
-            # TODO: need to pass in a method for this?
-            # pull out values for the bucket, weight by similarities and sum
+            similarities = self._similarity_measure(key, bucket_keys)
+            # where the keys are sentinel, mask it out
+            used_positions = tf.not_equal(bucket_keys[:, 0],
+                                          self.sentinel_value)
+            values = [tf.boolean_mask(val, used_positions)
+                      for val in bucket_values]
+            similarities = tf.boolean_mask(similarities, used_positions)
+            results = tuple(self._get_averaged_value(val, similarities)
+                            for val in values)
+        return results, similarities

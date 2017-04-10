@@ -14,7 +14,7 @@ def _row_in(row, mat):
 
 class TestDND(test.TestCase):
 
-    simple_shapes = [[100]]
+    simple_shapes = [[10]]
 
     def test_store_empty(self):
         """make sure we can store values in the dictionary"""
@@ -83,4 +83,23 @@ class TestDND(test.TestCase):
 
     def test_get(self):
         """make sure we can pull things back out"""
-        self.assertTrue(False)
+        dictionary = hashdict.HashDND(4, 10, 5, TestDND.simple_shapes)
+
+        key = tf.get_variable('key', shape=[5])
+        value = tf.get_variable('value', shape=TestDND.simple_shapes[0])
+
+        store_op = dictionary.store(key, [value])
+        result = dictionary.get(key)[0]
+
+        # should be pretty much perfect retrieval when nothing else is in
+
+        with self.test_session() as sess:
+            sess.run(tf.global_variables_initializer())
+
+            # run the store op
+            sess.run(store_op)
+
+            # now pull it out
+            original_val, retrieved_val = sess.run([value, result])
+
+            self.assertNDArrayNear(original_val, retrieved_val, 1e-5)
