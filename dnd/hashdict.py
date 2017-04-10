@@ -222,4 +222,4 @@ class HashDND(object):
             similarities = tf.boolean_mask(similarities, used_positions)
             results = tuple(self._get_averaged_value(val, similarities)
                             for val in values)
-        return results, similarities
+        return results
