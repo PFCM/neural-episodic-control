@@ -81,7 +81,7 @@ class TestDND(test.TestCase):
             self.assertTrue(_row_in(newkey, allkeys))
             self.assertTrue(_row_in(newval, allvals))
 
-    def test_get(self):
+    def test_get_one(self):
         """make sure we can pull things back out"""
         dictionary = hashdict.HashDND(4, 10, 5, TestDND.simple_shapes)
 
@@ -103,3 +103,49 @@ class TestDND(test.TestCase):
             original_val, retrieved_val = sess.run([value, result])
 
             self.assertNDArrayNear(original_val, retrieved_val, 1e-5)
+
+    def test_get_full(self):
+        """fill it up and try get the last couple"""
+        value_size = 2
+        dictionary = hashdict.HashDND(4, 5, 10, [[value_size]])
+
+        key_1 = tf.get_variable('key_1', shape=[10])
+        key_2 = tf.get_variable('key_2', shape=[10])
+
+        value_1 = tf.get_variable('value_1', shape=[value_size])
+        value_2 = tf.get_variable('value_2', shape=[value_size])
+
+        random_key = tf.random_normal([10])
+        random_val = tf.random_normal([value_size])
+
+        store_1 = dictionary.store(key_1, [value_1])
+        store_2 = dictionary.store(key_2, [value_2])
+        store_rand = dictionary.store(random_key, [random_val])
+        get_1 = dictionary.get(key_1)
+        get_2 = dictionary.get(key_2)
+
+        keys_full = tf.reduce_all(tf.not_equal(dictionary._keys,
+                                               dictionary.sentinel_value))
+
+        with self.test_session() as sess:
+            sess.run(tf.global_variables_initializer())
+
+            while not sess.run(keys_full):
+                sess.run(store_rand)
+
+            sess.run(store_1)
+            (result_1,), v1_np = sess.run([get_1, value_1])
+
+            sim_1 = (np.dot(v1_np/(np.sqrt(np.sum(v1_np**2))),
+                            result_1/(np.sqrt(np.sum(result_1**2)))))
+            # NOTE: this could fail just by bad luck... terrible test
+            self.assertLess(0.9, sim_1)
+
+            # try one more
+            sess.run(store_2)
+            (result_2,), v2_np = sess.run([get_2, value_2])
+
+            sim_2 = (np.dot(v2_np/(np.sqrt(np.sum(v2_np**2))),
+                            result_2/(np.sqrt(np.sum(result_2**2)))))
+            # NOTE: this could fail just by bad luck... terrible test
+            self.assertLess(0.9, sim_2)
