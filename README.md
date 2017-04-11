@@ -1,3 +1,4 @@
+[![Stories in Ready](https://badge.waffle.io/PFCM/neural-episodic-control.png?label=ready&title=Ready)](https://waffle.io/PFCM/neural-episodic-control)
 # Neural Episodic Control
 
 Implementation of something related to
