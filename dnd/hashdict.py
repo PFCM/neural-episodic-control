@@ -43,7 +43,7 @@ class HashDND(object):
         return keys, values
 
     def __init__(self, hash_bits, max_neighbours, key_size, value_shapes,
-                 similarity_measure=None):
+                 similarity_measure=None, name='dnd'):
         """Set up the dnd.
 
         Args:
@@ -66,14 +66,18 @@ class HashDND(object):
                 tensor  of keys to compare against. Should return a
                 `[max_neighbours]` tensor of similarities, between 0 and 1
                 where 1 means the two keys were identical.
+            name (Optional[str]): a name under which to group ops and
+                variables. Defaults to `dnd`.
         """
+        self._name = name
         self._hash_size = hash_bits
         self._key_size = key_size
         self._bucket_size = max_neighbours
-        self._keys, self._values = HashDND._setup_variables(hash_bits,
-                                                            max_neighbours,
-                                                            key_size,
-                                                            value_shapes)
+        with tf.variable_scope(self._name):
+            self._keys, self._values = HashDND._setup_variables(hash_bits,
+                                                                max_neighbours,
+                                                                key_size,
+                                                                value_shapes)
         self._hash_config = get_simhash_config(self._key_size,
                                                self._hash_size)
 
@@ -85,7 +89,7 @@ class HashDND(object):
     def _summarise_pressure(self):
         """add summaries for the load. It would be nice to have this
         per-bucket, but there is potentially a lot of buckets."""
-        with tf.name_scope('dnd_stats'):
+        with tf.name_scope(self._name + '/stats'):
             used_keys = tf.not_equal(self._keys[:, 0], self.sentinel_value)
             filled_keys = tf.reduce_sum(tf.cast(used_keys, tf.float32))
             tf.summary.scalar('total_fill', filled_keys)
@@ -120,7 +124,7 @@ class HashDND(object):
         Returns:
             op: an op which carries out the above steps.
         """
-        with tf.name_scope('dnd/store'):
+        with tf.name_scope(self._name + '/store'):
             bucket_keys, bucket_values, idx = self._get_bucket(key)
             # is there space?
             can_store = tf.reduce_any(tf.equal(bucket_keys[:, 0],
@@ -210,16 +214,20 @@ class HashDND(object):
         Returns:
             value (tuple): associated values.
         """
-        with tf.name_scope('dnd/get'):
+        # TODO: what to return when the bucket is empty?
+        # at the moment it is all zeros
+        with tf.name_scope(self._name + '/get'):
             bucket_keys, bucket_values, _ = self._get_bucket(key)
             # compute similarities
             similarities = self._similarity_measure(key, bucket_keys)
             # where the keys are sentinel, mask it out
             used_positions = tf.not_equal(bucket_keys[:, 0],
                                           self.sentinel_value)
+            num_used = tf.reduce_sum(tf.cast(used_positions, tf.int32))
             values = [tf.boolean_mask(val, used_positions)
                       for val in bucket_values]
             similarities = tf.boolean_mask(similarities, used_positions)
+
             results = tuple(self._get_averaged_value(val, similarities)
                             for val in values)
         return results

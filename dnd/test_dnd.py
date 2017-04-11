@@ -149,3 +149,16 @@ class TestDND(test.TestCase):
                             result_2/(np.sqrt(np.sum(result_2**2)))))
             # NOTE: this could fail just by bad luck... terrible test
             self.assertLess(0.9, sim_2)
+
+    def test_get_empty(self):
+        """what happens when we try and get something out of an empty bucket"""
+        dictionary = hashdict.HashDND(4, 10, 5, TestDND.simple_shapes)
+
+        key = tf.get_variable('key', shape=[5])
+        result = dictionary.get(key)[0]
+
+        with self.test_session() as sess:
+            sess.run(tf.global_variables_initializer())
+
+            get_value = sess.run(result)
+            self.assertAllEqual(get_value, np.zeros_like(get_value))
