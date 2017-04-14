@@ -131,7 +131,7 @@ class MFECAgent(object):
     def act(self, observation):
         """Get an action given an observation."""
         observation = np.ravel(observation)
-        action = self._session.run(self._act_op,
+        action, _ = self._session.run([self._act_op, self._update_frame_count],
                                    {self._input_pl: observation})
         self._trajectory.append((observation, action))
         return action
@@ -151,7 +151,6 @@ class MFECAgent(object):
         logging.info('storing results of trajectory')
         for i, timestep in enumerate(self._trajectory):
             state, action, reward = timestep
-            logging.debug('%d: %d, %f, %s', i, action, reward, state.shape)
             discounts = np.arange(len(self._trajectory) - i)
             discounts = self._gamma ** discounts
             rewards = np.array([item[-1] for item in self._trajectory[i:]])
@@ -160,6 +159,7 @@ class MFECAgent(object):
             self._session.run(self._store_ops[action],
                               {self._input_pl: state,
                                self._reward_pl: [reward_t]})
+            logging.debug('%d: %d, %f, %s', i, action, reward_t, state.shape)
 
         # clear the trajectory
         self._trajectory = []
