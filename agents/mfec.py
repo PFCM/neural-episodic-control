@@ -79,7 +79,12 @@ class MFECAgent(object):
                     self._store_ops.append(self._memories[action].store(
                         projected_key, [store_val]))
 
-            self._act_op = tf.where(tf.random_uniform([1]) > epsilon,
+            # set up a decaying epsilon for the policy
+            e_step = (1.0 - epsilon) / 200000
+            e_var = tf.get_variable('epsilon', initializer=1.0)
+            self._epsilon = tf.maximum(e_var.assign_sub(e_step), epsilon)
+            tf.summary.scalar('epsilon', self._epsilon)
+            self._act_op = tf.where(tf.random_uniform([1]) > self._epsilon,
                                     tf.argmax(tf.stack(self._get_ops), axis=0),
                                     tf.random_uniform([1], minval=0,
                                                       maxval=num_actions,
@@ -159,24 +164,27 @@ class MFECAgent(object):
             self._session.run(self._store_ops[action],
                               {self._input_pl: state,
                                self._reward_pl: [reward_t]})
-            logging.debug('%d: %d, %f, %s', i, action, reward_t, state.shape)
-
-        # clear the trajectory
-        self._trajectory = []
+            # logging.debug('%d: %d, %f, %s', i, action, reward_t, state.shape)
 
         # write summaries
         logging.info('writing summaries')
         viewed_frames = self._session.run(self._frame_counter)
         self._summary_writer.add_summary(self._session.run(
             self._all_summaries), global_step=viewed_frames)
+        total_reward = np.sum([item[-1]
+                               for item in self._trajectory])
+        logging.info('total reward %f', total_reward)
         self._summary_writer.add_summary(tf.Summary(
             value=[tf.Summary.Value(
                 tag='average_episode_reward',
-                simple_value=np.sum([item[-1]
-                                     for item in self._trajectory]))]),
+                simple_value=total_reward)]),
             viewed_frames)
         # and a checkpoint
         logging.info('saving checkpoint')
         self._saver.save(
             self._session,
             os.path.join(self._logdir, 'model-{}'.format(viewed_frames)))
+        
+        # clear the trajectory
+        self._trajectory = []
+
