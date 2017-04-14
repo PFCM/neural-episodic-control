@@ -172,8 +172,8 @@ class MFECAgent(object):
         self._summary_writer.add_summary(tf.Summary(
             value=[tf.Summary.Value(
                 tag='average_episode_reward',
-                simple_value=np.mean([item[-1]
-                                      for item in self._trajectory]))]),
+                simple_value=np.sum([item[-1]
+                                     for item in self._trajectory]))]),
             viewed_frames)
         # and a checkpoint
         logging.info('saving checkpoint')
