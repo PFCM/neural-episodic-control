@@ -26,7 +26,9 @@ def get_agent(args, env):
         agent = agents.RandomAgent(env.action_space.n)
     elif args.agent == 'mfec':
         agent = agents.MFECAgent(env.action_space.n,
-                                 84*84, args.logdir)
+                                 84*84, args.logdir,
+                                 hash_bits=args.hash_bits,
+                                 projection_size=args.projection_size)
     else:
         raise ValueError('unknown agent: {}'.format(args.agent))
     return agent
