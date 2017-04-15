@@ -223,10 +223,11 @@ class HashDND(object):
             # where the keys are sentinel, mask it out
             used_positions = tf.not_equal(bucket_keys[:, 0],
                                           self.sentinel_value)
-            num_used = tf.reduce_sum(tf.cast(used_positions, tf.int32))
             values = [tf.boolean_mask(val, used_positions)
                       for val in bucket_values]
             similarities = tf.boolean_mask(similarities, used_positions)
+            # normalise them to sum to one, and maybe give them a kick
+            similarities /= tf.reduce_sum(similarities)
 
             results = tuple(self._get_averaged_value(val, similarities)
                             for val in values)
