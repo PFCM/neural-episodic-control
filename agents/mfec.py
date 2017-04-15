@@ -20,7 +20,8 @@ class MFECAgent(object):
     """
 
     def __init__(self, num_actions, state_size, logdir, projection_size=64,
-                 hash_bits=8, max_neighbours=11, epsilon=0.005, discount=0.99):
+                 hash_bits=8, max_neighbours=11, epsilon=0.005,
+                 epsilon_steps=1000000, discount=0.99):
         """Sets up initial data structures and a session and initialises.
 
         Args:
@@ -42,6 +43,8 @@ class MFECAgent(object):
                 nearest neighbour lookup.
             epsilon (Optional[float]): exploration rate for the final policy.
                 This is the chance of picking a move completely at random.
+            epsilon_decay_steps (Optional[int]): how many steps we take to
+                linearly decay the exploration rate from 1 to `epsilon`.
             discount (Optional[float]): discount rate for the rewards.
         """
         self._logdir = logdir
@@ -80,7 +83,7 @@ class MFECAgent(object):
                         projected_key, [store_val]))
 
             # set up a decaying epsilon for the policy
-            e_step = (1.0 - epsilon) / 200000
+            e_step = (1.0 - epsilon) / epsilon_steps
             e_var = tf.get_variable('epsilon', initializer=1.0)
             self._epsilon = tf.maximum(e_var.assign_sub(e_step), epsilon)
             tf.summary.scalar('epsilon', self._epsilon)
@@ -184,7 +187,6 @@ class MFECAgent(object):
         self._saver.save(
             self._session,
             os.path.join(self._logdir, 'model-{}'.format(viewed_frames)))
-        
+
         # clear the trajectory
         self._trajectory = []
-

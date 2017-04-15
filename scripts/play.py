@@ -28,7 +28,8 @@ def get_agent(args, env):
         agent = agents.MFECAgent(env.action_space.n,
                                  84*84, args.logdir,
                                  hash_bits=args.hash_bits,
-                                 projection_size=args.projection_size)
+                                 projection_size=args.projection_size,
+                                 epsilon_steps=args.epsilon_steps)
     else:
         raise ValueError('unknown agent: {}'.format(args.agent))
     return agent
@@ -53,6 +54,8 @@ def _parse_args():
                         help='how many neighbours in approx nearest neighbour')
     parser.add_argument('--logdir', default='./results',
                         help='where to save stuff')
+    parser.add_argument('--epsilon_steps', default=1000000, type=int,
+                        help='how fast to decay the exploration')
 
     parser.add_argument('--env', '-e', default='Pong-v0',
                         help='Name of the gym environment to use.')
